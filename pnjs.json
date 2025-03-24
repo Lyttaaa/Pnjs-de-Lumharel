@@ -1,6 +1,6 @@
 {
   "Aubergiste": {
-    "nom_affiche": "Aubergiste de Lumharel",
+    "nom_affiche": "Aubergiste",
     "webhook_env": "WEBHOOK_AUBERGISTE",
     "mots_cles": ["livraison", "champignon", "commande", "omelette", "ingrédients", "bonjour", "salut"],
     "repliques": [
@@ -12,7 +12,7 @@
     ]
   },
   "Boulanger": {
-    "nom_affiche": "Boulanger de Molgel",
+    "nom_affiche": "Boulanger",
     "webhook_env": "WEBHOOK_BOULANGER",
     "mots_cles": ["miche", "pain", "livraison", "bonjour", "salut", "fournée", "boulanger"],
     "repliques": [
