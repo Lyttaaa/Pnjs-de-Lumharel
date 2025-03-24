@@ -1,0 +1,26 @@
+{
+  "Aubergiste": {
+    "nom_affiche": "Aubergiste de Lumharel",
+    "webhook_env": "WEBHOOK_AUBERGISTE",
+    "mots_cles": ["livraison", "champignon", "commande", "omelette", "ingrédients", "bonjour", "salut"],
+    "repliques": [
+      "Oh merci {user}, j'attendais justement cette livraison 🍄 !",
+      "Tu tombes à pic {user} ! Mon omelette de minuit va être parfaite grâce à toi.",
+      "Héhé, toujours au rendez-vous toi, {user} ! Allez, bois un coup, c’est offert ! 🍻",
+      "Un vrai aventurier, {user} ! Merci pour ces champignons !",
+      "Je commençais à m’inquiéter, {user}... Heureusement que t’es là !"
+    ]
+  },
+  "Boulanger": {
+    "nom_affiche": "Boulanger de Molgel",
+    "webhook_env": "WEBHOOK_BOULANGER",
+    "mots_cles": ["miche", "pain", "livraison", "bonjour", "salut", "fournée", "boulanger"],
+    "repliques": [
+      "Ah, ma miche préférée est enfin là ! Merci {user} 🥖",
+      "Sans toi {user}, les habitants auraient faim aujourd’hui !",
+      "Le four était prêt, il ne manquait plus que toi, {user} !",
+      "Encore une mission pain-complie, merci {user} !",
+      "Les miches sont en route grâce à toi ! Tu mérites une croûte dorée 🍞"
+    ]
+  }
+}
