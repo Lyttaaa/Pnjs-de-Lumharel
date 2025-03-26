@@ -2,7 +2,7 @@
   "Aubergiste": {
     "nom_affiche": "Aubergiste",
     "webhook_env": "WEBHOOK_AUBERGISTE",
-    "mots_cles": ["livraison", "champignon", "omelette", "ingrédients", "bonjour", "salut"],
+    "mots_cles": ["@Aubergiste", "livraison", "champignon", "omelette", "ingrédients", "bonjour", "salut"],
     "repliques": [
       "Oh merci {user}, j'attendais justement cette livraison 🍄 !",
       "Tu tombes à pic {user} ! Mon omelette de minuit va être parfaite grâce à toi.",
@@ -14,7 +14,7 @@
   "Boulanger": {
     "nom_affiche": "Boulanger",
     "webhook_env": "WEBHOOK_BOULANGER",
-    "mots_cles": ["miche", "pain", "livraison", "bonjour", "salut", "fournée"],
+    "mots_cles": ["@Boulanger", "miche", "pain", "livraison", "bonjour", "salut", "fournée"],
     "repliques": [
       "Ah, ma miche préférée est enfin là ! Merci {user} 🥖",
       "Sans toi {user}, les habitants auraient faim aujourd’hui !",
