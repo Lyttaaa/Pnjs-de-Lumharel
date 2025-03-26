@@ -27,11 +27,18 @@ async def on_message(message):
         return
 
     contenu = message.content.lower()
+    print(f"\n📩 Nouveau message reçu : \"{message.content}\" de {message.author.display_name}")
 
     for nom_pnj, data in pnjs.items():
+        print(f"\n🔍 Analyse pour PNJ : {nom_pnj}")
+
         mention_nom = nom_pnj.lower() in contenu
         mention_role = any(role.name.lower() == nom_pnj.lower() for role in message.role_mentions)
-        mot_clef_trouve = any(mot in contenu for mot in data["mots_cles"])
+        mot_clef_trouve = any(mot.lower() in contenu for mot in data["mots_cles"])
+
+        print(f"   ➤ Mention nom : {mention_nom}")
+        print(f"   ➤ Mention rôle : {mention_role}")
+        print(f"   ➤ Mot-clé trouvé : {mot_clef_trouve}")
 
         if (mention_nom or mention_role) and mot_clef_trouve:
             webhook_url = os.getenv(data["webhook_env"])
@@ -39,15 +46,17 @@ async def on_message(message):
                 print(f"⚠️ Webhook non défini pour {nom_pnj}")
                 continue
 
+            reponse = random.choice(data["repliques"]).format(user=message.author.mention)
+            print(f"✅ Conditions remplies ! Envoi de la réplique : {reponse}")
+
             async with aiohttp.ClientSession() as session:
                 webhook = discord.Webhook.from_url(webhook_url, session=session)
-
-                reponse = random.choice(data["repliques"]).format(user=message.author.mention)
-
                 await webhook.send(
                     content=reponse,
-                    username=data["nom_affiche"]  # Peut être remplacé si tu veux varier les noms
+                    username=data["nom_affiche"]
                 )
+        else:
+            print(f"❌ Conditions non remplies pour {nom_pnj}")
 
     await bot.process_commands(message)
 
