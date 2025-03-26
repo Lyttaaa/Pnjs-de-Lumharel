@@ -11,6 +11,7 @@ def charger_pnjs():
         return json.load(f)
 
 pnjs = charger_pnjs()
+dernieres_repliques = {}  # Dictionnaire pour stocker les dernières répliques par PNJ
 
 # Config bot
 intents = discord.Intents.default()
@@ -46,7 +47,14 @@ async def on_message(message):
                 print(f"⚠️ Webhook non défini pour {nom_pnj}")
                 continue
 
-            reponse = random.choice(data["repliques"]).format(user=message.author.mention)
+            repliques = data["repliques"]
+            derniere = dernieres_repliques.get(nom_pnj)
+
+            # Filtrer pour ne pas reprendre la dernière
+            possibles = [r for r in repliques if r != derniere] or repliques
+            reponse = random.choice(possibles).format(user=message.author.mention)
+            dernieres_repliques[nom_pnj] = reponse  # Mémoriser la nouvelle
+
             print(f"✅ Conditions remplies ! Envoi de la réplique : {reponse}")
 
             async with aiohttp.ClientSession() as session:
