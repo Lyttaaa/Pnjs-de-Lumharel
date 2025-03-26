@@ -90,6 +90,23 @@
       "Excellent, voici le plan {user}..."
     ]
   },
+  "Musicien": {
+    "nom_affiche": "Musicien",
+    "webhook_env": "WEBHOOK_MUSICIEN",
+    "mots_cles": [
+      "@Musicien",
+      "bravo",
+      "magnifique",
+      "mélodie",
+    ],
+    "repliques": [
+      "Merci {user}...Merci pour votre générosité..*s'incline pour te remercier*",
+      "Vous savez {user}, je chante, par tous temps...mais ça ne rapporte pas toujours...mon chapeau est souvent vide...",
+      "Je salue votre geste {user}, je pourrait m'offrir un repas ce soir, je vous en suis reconnaissant.",
+      "*il se met à chanter de plus belle pour vous remercier d'avoir déposé quelques Lumes dans son chapeau*",
+      "Que les Souffles vous bénissent {user}, vous avez fait un homme heureux aujourd'hui.."
+    ]
+  },
   "Peintre": {
     "nom_affiche": "Peintre",
     "webhook_env": "WEBHOOK_PEINTRE",
