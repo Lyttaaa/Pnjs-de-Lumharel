@@ -1,1 +1,1 @@
-start: python bot_pnj.py
+worker: python bot_pnj.py
