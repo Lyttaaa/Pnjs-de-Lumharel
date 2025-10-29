@@ -132,29 +132,34 @@ async def on_message(message):
             await bot.process_commands(message)
             return
 
-        # ✅ Conditions OK : répondre avec réplique liée à la quête si dispo
-        repliques_spec = (pnj_data.get("repliques_par_quete") or {}).get(quest_id)
-        if not repliques_spec:
-            repliques_spec = pnj_data.get("repliques") or [f"{pnj_data.get('nom_affiche','PNJ')} te salue, {{user}}."]
+       # ✅ Conditions OK : réplique prioritaire depuis la quête (replique_pnj), sinon fallback PNJ générique
+       texte = (quete.get("replique_pnj") or "").strip()
+       if not texte:
+           pool = pnj_data.get("repliques") or [f"{pnj_data.get('nom_affiche','PNJ')} te salue, {{user}}."]
+           derniere = dernieres_repliques.get((pnj_name, quest_id, message.author.id))
+           candidats = [r for r in pool if r != derniere] or pool
+           texte = random.choice(candidats)
 
-        derniere = dernieres_repliques.get((pnj_name, quest_id, message.author.id))
-        possibles = [r for r in repliques_spec if r != derniere] or repliques_spec
-        reponse = random.choice(possibles).format(user=message.author.mention)
-        dernieres_repliques[(pnj_name, quest_id, message.author.id)] = reponse
+      texte = texte.format(user=message.author.mention)
 
-        print(f"✅ Interaction simple OK. Envoi de la réplique pour {pnj_name}/{quest_id} : {reponse}")
+      print(f"✅ Interaction simple OK. Envoi de la réplique pour {pnj_name}/{quest_id} : {texte}")
 
-        async with aiohttp.ClientSession() as session:
-            webhook = discord.Webhook.from_url(webhook_url, session=session)
-            await webhook.send(content=reponse, username=pnj_data.get("nom_affiche", "PNJ"))
+      async with aiohttp.ClientSession() as session:
+          webhook = discord.Webhook.from_url(webhook_url, session=session)
+          await webhook.send(content=texte, username=pnj_data.get("nom_affiche", "PNJ"))
 
-        # 👇 Libérer l'interaction ici (validation finale par emoji ? Si non, on clear maintenant)
-        # Si ta validation finale passe par réaction EMOJI côté Maître des Quêtes pour TOUTES les interactions,
-        # commente la ligne suivante pour les simples aussi. Sinon, on libère :
-        clear_active_interaction(message.author.id)
+      # 🧷 Si la quête simple attend une RÉACTION (emoji au niveau racine), on NE clear PAS ici.
+      emoji_root = quete.get("emoji")
+      if emoji_root:
+          set_active_interaction(message.author.id, {
+              "awaiting_reaction": True,
+              "emoji": emoji_root
+          })
+      else:
+          clear_active_interaction(message.author.id)
 
-        await bot.process_commands(message)
-        return
+      await bot.process_commands(message)
+      return
 
     # ---------- Cas B : multi_step ----------
     steps = quete.get("steps", [])
@@ -176,14 +181,15 @@ async def on_message(message):
         return
 
     # ✅ Conditions OK : réplique d'étape
-    texte = (step.get("replique_pnj") or "").replace("{user}", message.author.mention)
+    texte = (step.get("replique_pnj") or "").strip()
     if not texte:
-        # fallback : répliques spécifiques à la quête ou génériques
-        spec = (pnj_data.get("repliques_par_quete") or {}).get(quest_id)
-        if spec:
-            texte = random.choice(spec).format(user=message.author.mention)
-        else:
-            texte = f"{pnj_data.get('nom_affiche','PNJ')} te salue, {message.author.mention}."
+        pool = pnj_data.get("repliques") or [f"{pnj_data.get('nom_affiche','PNJ')} te salue, {{user}}."]
+        derniere = dernieres_repliques.get((pnj_name, quest_id, message.author.id))
+        candidats = [r for r in pool if r != derniere] or pool
+        texte = random.choice(candidats)
+
+    texte = texte.format(user=message.author.mention)
+
 
     print(f"✅ Étape {step_index+1}/{len(steps)} OK. Envoi de la réplique : {texte}")
 
