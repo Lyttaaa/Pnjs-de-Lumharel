@@ -5,9 +5,9 @@
     "mots_cles": [
       "@Aubergiste",
       "livraison",
-      "champignons",
+      "champignons"
     ],
-    "replique_pnj":[
+    "repliques":[
       "Bienvenue au comptoir, {user}.",
       "Prends donc une chaise."
     ]
@@ -17,9 +17,9 @@
     "webhook_env": "WEBHOOK_BOULANGER",
     "mots_cles": [
       "@Boulanger",
-      "miche",
+      "miche"
     ],
-    "repliques_pnj": [
+    "repliques": [
       "Bonjour {user} !",
       "Le four chante tôt aujourd'hui."
     ]
@@ -30,7 +30,7 @@
     "mots_cles": [
       "Ouvre grand les yeux", "voyageur du monde", "car ce soir", "le destin t'accorde une faveur rare : la présence de @Saltimbanque", "poète des âmes, prodige des planches", "flamme du verbe et du geste… Hélas", "trop humble pour te l'avouer lui-même."
     ],
-    "repliques_pnj": [
+    "repliques": [
       "Oooo désespoir...",
       "Mmmmm il me faut quelqu'un..."
     ]
@@ -38,7 +38,7 @@
   "Homme Mystérieux": {
     "nom_affiche": "Homme Mystérieux",
     "webhook_env": "WEBHOOK_HOMME_MYSTERIEUX",
-    "replique_pnj":[
+    "repliques":[
       "Mmmmm..."
     ]
   },
@@ -49,7 +49,7 @@
       "@Contrebandier",
       "cargaison"
     ],
-    "repliques_pnj": [
+    "repliques": [
       "Pssst...pssst..",
       "Eh toi la..pssst...chut doucement..."
     ]
@@ -59,11 +59,11 @@
     "webhook_env": "WEBHOOK_MUSICIEN",
     "mots_cles": [
       "@Musicien",
-      "bravo",
+      "bravo"
     ],
-    "repliques_pnj": [
+    "repliques": [
       "*fredonne*",
-      "la lala laaaaaa",
+      "la lala laaaaaa"
     ]
   },
   "Peintre": {
@@ -73,7 +73,7 @@
       "@Peintre",
       "titre"
     ],
-    "repliques_pnj": [
+    "repliques": [
       "Ton non sera....Mmm je ne  sais pas..",
       "Un peu de rouge ici...puis un peu de jaune par là..."
     ]
