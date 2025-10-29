@@ -5,18 +5,11 @@
     "mots_cles": [
       "@Aubergiste",
       "livraison",
-      "champignon",
-      "omelette",
-      "ingrédients",
-      "bonjour",
-      "salut"
+      "champignons",
     ],
-    "repliques": [
-      "Oh merci {user}, j'attendais justement cette livraison 🍄 !",
-      "Tu tombes à pic {user} ! Mon omelette de minuit va être parfaite grâce à toi.",
-      "Héhé, toujours au rendez-vous toi, {user} ! Allez, bois un coup, c’est offert ! 🍻",
-      "Un vrai aventurier, {user} ! Merci pour ces champignons !",
-      "Je commençais à m’inquiéter, {user}... Heureusement que t’es là !"
+    "replique_pnj":[
+      "Bienvenue au comptoir, {user}.",
+      "Prends donc une chaise."
     ]
   },
   "Boulanger": {
@@ -25,18 +18,10 @@
     "mots_cles": [
       "@Boulanger",
       "miche",
-      "pain",
-      "livraison",
-      "bonjour",
-      "salut",
-      "fournée"
     ],
-    "repliques": [
-      "Ah, ma miche préférée est enfin là ! Merci {user} 🥖",
-      "Sans toi {user}, les habitants auraient faim aujourd’hui !",
-      "Le four était prêt, il ne manquait plus que toi, {user} !",
-      "Encore une mission pain-complie, merci {user} !",
-      "Les miches sont en route grâce à toi ! Tu mérites une croûte dorée 🍞"
+    "repliques_pnj": [
+      "Bonjour {user} !",
+      "Le four chante tôt aujourd'hui."
     ]
   },
   "Saltimbanque": {
@@ -45,31 +30,16 @@
     "mots_cles": [
       "Ouvre grand les yeux", "voyageur du monde", "car ce soir", "le destin t'accorde une faveur rare : la présence de @Saltimbanque", "poète des âmes, prodige des planches", "flamme du verbe et du geste… Hélas", "trop humble pour te l'avouer lui-même."
     ],
-    "repliques": [
-      "MAGNIFIQUE {user} !! SUBLIMISSIME!! ✨",
-      "Excellent {user}, tu es fait.e pour faire de la scène mon ami.e!!!",
-      "Mmmm nan Cela ne me plait pas du tout {user}. Je vais demander à quelqu'un d'autre finalement !",
-      "C'est pas mal {user}, avec du travail du seras prêt.e pour le grand jour !",
-      "Horrible!!! Quelle tragédie, je n'ai jamais vu quelqu'un d'aussi mauvais!!! Aaaah"
+    "repliques_pnj": [
+      "Oooo désespoir...",
+      "Mmmmm il me faut quelqu'un..."
     ]
   },
   "Homme Mystérieux": {
     "nom_affiche": "Homme Mystérieux",
     "webhook_env": "WEBHOOK_HOMME_MYSTERIEUX",
-    "mots_cles": [
-      "@Homme Mystérieux",
-      "Oula",
-      "Ouille",
-      "maladroit",
-      "maladroite",
-      "trébuché"
-    ],
-    "repliques": [
-      "Héhéhé..😈 Merci {user} *te fait un clin d'oeil*",
-      "*Acquiesce en guise de remerciement*",
-      "Concentre toi mon ami! *dit-il a son adversaire* En réalité il avait déjà fait son tour de passe passe, grace à toi en plus..",
-      "Ola, tu ne veux pas l'aider un peu? *dit-il à son adversaire* Pendant que tu te fais aider, l'Homme Mystérieux en profite pour échanger ses cartes discrètement et te fait un clin d'oeil.",
-      "*ne dit rien* en profite pour changer ses cartes..."
+    "replique_pnj":[
+      "Mmmmm..."
     ]
   },
   "Contrebandier": {
@@ -77,17 +47,11 @@
     "webhook_env": "WEBHOOK_CONTREBANDIER",
     "mots_cles": [
       "@Contrebandier",
-      "psst",
-      "accepte",
-      "aider",
       "cargaison"
     ],
-    "repliques": [
-      "Très bien, approche {user}... alors du coup on va faire comme ça, vers minuit...*il se met à chuchoter de plus en plus bas...*",
-      "Pas si fort!! Chuut...vient par là {user}",
-      "Attention tu va te faire prendre {user}!",
-      "Parfait! Reste discret.e {user}...Allons discuter plus loin...",
-      "Excellent, voici le plan {user}..."
+    "repliques_pnj": [
+      "Pssst...pssst..",
+      "Eh toi la..pssst...chut doucement..."
     ]
   },
   "Musicien": {
@@ -96,15 +60,10 @@
     "mots_cles": [
       "@Musicien",
       "bravo",
-      "magnifique",
-      "mélodie"
     ],
-    "repliques": [
-      "Merci {user}...Merci pour votre générosité..*s'incline pour te remercier*",
-      "Vous savez {user}, je chante, par tous temps...mais ça ne rapporte pas toujours...mon chapeau est souvent vide...",
-      "Je salue votre geste {user}, je pourrait m'offrir un repas ce soir, je vous en suis reconnaissant.",
-      "*il se met à chanter de plus belle pour vous remercier d'avoir déposé quelques Lumes dans son chapeau*",
-      "Que les Souffles vous bénissent {user}, vous avez fait un homme heureux aujourd'hui.."
+    "repliques_pnj": [
+      "*fredonne*",
+      "la lala laaaaaa",
     ]
   },
   "Peintre": {
@@ -112,16 +71,11 @@
     "webhook_env": "WEBHOOK_PEINTRE",
     "mots_cles": [
       "@Peintre",
-      "Réfléchir",
-      "propose",
       "titre"
     ],
-    "repliques": [
-      "WOW ça c'est un titre {user} !!",
-      "C'est parfait, ça correspond totalement à ce que j'avais en tête, merci {user}!",
-      "Mmm je ne suis pas convaincue {user}, je vais chercher encore.",
-      "Je crois que c'est exactement ce qu'il me fallait {user}! *dit-elle en signant son oeuvre*",
-      "Merciii {user} Grace à toi je vais enfin pouvoir l'afficher dans ma galerie !"
+    "repliques_pnj": [
+      "Ton non sera....Mmm je ne  sais pas..",
+      "Un peu de rouge ici...puis un peu de jaune par là..."
     ]
   }
 }
