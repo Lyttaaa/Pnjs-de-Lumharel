@@ -1,222 +1,327 @@
+# bot_pnj.py
+# PNJ bot pour Lumharel — gère les répliques PNJ pour les quêtes d'interaction (simples & multi-étapes)
+
+import os
+import json
+import random
+import logging
+from typing import Dict, Any, Optional
+
 import discord
 from discord.ext import commands
-import os
 import aiohttp
-import random
-import json
 from pymongo import MongoClient
 
 
-# Charger les PNJs
-def charger_pnjs():
-    with open("pnjs.json", "r", encoding="utf-8") as f:
-        return json.load(f)
+# -----------------------------
+# Configuration & initialisation
+# -----------------------------
 
-pnjs = charger_pnjs()
-dernieres_repliques = {}  # Dictionnaire pour stocker les dernières répliques par PNJ
+logging.basicConfig(level=logging.INFO)
+log = logging.getLogger("pnj-bot")
 
-# Charger les quêtes (pour lire les "multi_step" et d'autres champs)
-def charger_quetes():
-    with open("quetes.json", "r", encoding="utf-8") as f:
-        return json.load(f)
+INTENTS = discord.Intents.default()
+INTENTS.message_content = True  # nécessaire pour lire le contenu des messages
 
-def indexer_quetes_par_id(quetes_raw):
-    index = {}
-    for cat, lst in quetes_raw.items():
-        if not isinstance(lst, list):
-            continue
-        for q in lst:
-            qid = (q.get("id") or "").upper()
-            if qid:
-                index[qid] = q
-    return index
+bot = commands.Bot(
+    command_prefix="!",
+    intents=INTENTS,
+    allowed_mentions=discord.AllowedMentions(
+        everyone=False, roles=False, users=True, replied_user=False
+    ),
+)
 
-QUETES_RAW = charger_quetes()
-QUETES_INDEX = indexer_quetes_par_id(QUETES_RAW)
+# chemins fichiers (env → fallback local)
+PNJS_PATH = os.getenv("PNJS_PATH", "pnjs.json")
+QUETES_PATH = os.getenv("QUETES_PATH", "quetes.json")
 
-def charger_quete_par_id(quest_id: str):
-    return QUETES_INDEX.get((quest_id or "").upper())
-
-# --- Mongo (état des joueurs) ---
+# Mongo
 MONGO_URI = os.getenv("MONGO_URI")
-client = MongoClient(MONGO_URI) if MONGO_URI else None
-db = client.lumharel_bot if client else None
+mongo_client: Optional[MongoClient] = MongoClient(MONGO_URI) if MONGO_URI else None
+db = mongo_client.lumharel_bot if mongo_client else None
 user_state = db.user_state if db else None
 
-def get_active_interaction(user_id: int):
+# Petit cache anti-répétition de réplique par (pnj, quest, user)
+dernieres_repliques: Dict[tuple, str] = {}
+
+
+# -----------------------------
+# Chargement PNJ & Quêtes
+# -----------------------------
+
+def charger_pnjs() -> Dict[str, Any]:
+    with open(PNJS_PATH, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    # normaliser les clés (strip)
+    return {str(k).strip(): v for k, v in data.items()}
+
+
+def charger_quetes_raw() -> Dict[str, Any]:
+    with open(QUETES_PATH, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def indexer_quetes_par_id(quetes_raw: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    """
+    L'index passe sur toutes les valeurs top-level qui sont des listes
+    (ex: "Quêtes Interactions", "Quêtes Interactions (AJOUTS)", etc.)
+    et indexe par q['id'].
+    """
+    index = {}
+    for key, val in quetes_raw.items():
+        if isinstance(val, list):
+            for q in val:
+                qid = (q.get("id") or "").upper()
+                if qid:
+                    index[qid] = q
+    return index
+
+
+def charger_quete_par_id(quest_id: str) -> Optional[Dict[str, Any]]:
+    return QUETES_INDEX.get((quest_id or "").upper())
+
+
+pnjs: Dict[str, Any] = charger_pnjs()
+QUETES_RAW: Dict[str, Any] = charger_quetes_raw()
+QUETES_INDEX: Dict[str, Dict[str, Any]] = indexer_quetes_par_id(QUETES_RAW)
+
+log.info(f"PNJs chargés: {list(pnjs.keys())}")
+log.info(f"Quêtes indexées: {len(QUETES_INDEX)}")
+
+
+# -----------------------------
+# Utilitaires Mongo
+# -----------------------------
+
+def get_active_interaction(user_id: int) -> Optional[Dict[str, Any]]:
     if not user_state:
         return None
     doc = user_state.find_one({"_id": str(user_id)}, {"active_interaction": 1})
     return (doc or {}).get("active_interaction")
 
-def set_active_interaction(user_id: int, patch: dict):
+
+def set_active_interaction(user_id: int, patch: Dict[str, Any]) -> None:
     if not user_state:
         return
-    user_state.update_one({"_id": str(user_id)}, {"$set": {f"active_interaction.{k}": v for k, v in patch.items()}})
+    user_state.update_one(
+        {"_id": str(user_id)},
+        {"$set": {f"active_interaction.{k}": v for k, v in patch.items()}},
+        upsert=True,
+    )
 
-def clear_active_interaction(user_id: int):
+
+def clear_active_interaction(user_id: int) -> None:
     if not user_state:
         return
     user_state.update_one({"_id": str(user_id)}, {"$unset": {"active_interaction": ""}})
 
-# Config bot
-intents = discord.Intents.default()
-intents.message_content = True
-bot = commands.Bot(command_prefix="?", intents=intents)
+
+# -----------------------------
+# Aide : envoi d'une réplique PNJ
+# -----------------------------
+
+async def envoyer_replique_pnj(
+    pnj_name: str,
+    pnj_data: Dict[str, Any],
+    contenu: str,
+) -> None:
+    """Envoie 'contenu' via le webhook défini pour ce PNJ."""
+    webhook_env = pnj_data.get("webhook_env", "")
+    webhook_url = os.getenv(webhook_env)
+    if not webhook_url:
+        log.warning(f"Webhook manquant pour PNJ '{pnj_name}' (env {webhook_env})")
+        return
+
+    async with aiohttp.ClientSession() as session:
+        webhook = discord.Webhook.from_url(webhook_url, session=session)
+        await webhook.send(content=contenu, username=pnj_data.get("nom_affiche", pnj_name))
+
+
+def choisir_fallback_pnj(
+    pnj_name: str,
+    pnj_data: Dict[str, Any],
+    quest_id: str,
+    user_id: int,
+) -> str:
+    """Choisit une réplique générique de fallback depuis pnjs.json."""
+    pool = pnj_data.get("repliques") or [f"{pnj_data.get('nom_affiche','PNJ')} te salue, {{user}}."]
+    derniere = dernieres_repliques.get((pnj_name, quest_id, user_id))
+    candidats = [r for r in pool if r != derniere] or pool
+    texte = random.choice(candidats)
+    dernieres_repliques[(pnj_name, quest_id, user_id)] = texte
+    return texte
+
+
+# -----------------------------
+# Événements & commandes
+# -----------------------------
 
 @bot.event
 async def on_ready():
-    print("🎭 Le théâtre des PNJs de Lumharel est prêt !")
+    log.info(f"Connectée en tant que {bot.user} (PNJ bot)")
+    # petit indicateur de présence
+    await bot.change_presence(activity=discord.Game(name="Lumharel — PNJ"))
+
+
+@bot.command(name="debug_interaction")
+async def debug_interaction(ctx: commands.Context):
+    """Affiche l'état active_interaction de l'utilisateur."""
+    state = get_active_interaction(ctx.author.id)
+    await ctx.reply(f"active_interaction = `{state}`")
+
+
+@bot.command(name="reset_interaction")
+async def reset_interaction(ctx: commands.Context):
+    """Efface l'état active_interaction de l'utilisateur."""
+    clear_active_interaction(ctx.author.id)
+    await ctx.reply("Interaction active effacée.")
+
 
 @bot.event
-async def on_message(message):
+async def on_message(message: discord.Message):
+    # laisser passer les messages du bot lui-même + commandes
     if message.author.bot:
         return
 
-    contenu = message.content.lower()
-    print(f'\n📩 Nouveau message reçu : "{message.content}" de {message.author.display_name}')
+    contenu = (message.content or "").lower()
+    channel_name = getattr(message.channel, "name", "").lower()
 
-    # 🔒 1) Vérifier s'il y a une interaction active pour CE joueur
+    # 1) Lire la quête d'interaction active pour cet utilisateur
     state = get_active_interaction(message.author.id)
     if not state:
-        # Aucune quête d'interaction active -> ignorer
         await bot.process_commands(message)
         return
 
     quest_id = state.get("quest_id")
     pnj_name = (state.get("pnj") or "").strip()
     awaiting_reaction = bool(state.get("awaiting_reaction"))
-    current_step = state.get("current_step")  # None pour les interactions simples
+    current_step = state.get("current_step")  # None si interaction simple
 
-    # 2) Charger la quête concernée
+    # 2) Charger la quête
     quete = charger_quete_par_id(quest_id)
     if not quete:
-        print(f"⚠️ Quête {quest_id} introuvable dans quetes.json")
+        log.warning(f"Quête {quest_id} introuvable dans {QUETES_PATH}")
         await bot.process_commands(message)
         return
 
-    # 3) Récupérer la fiche PNJ
+    # 3) Charger le PNJ
     if pnj_name not in pnjs:
-        print(f"⚠️ PNJ {pnj_name} introuvable dans pnjs.json")
+        log.warning(f"PNJ '{pnj_name}' introuvable dans {PNJS_PATH}")
         await bot.process_commands(message)
         return
     pnj_data = pnjs[pnj_name]
-    webhook_url = os.getenv(pnj_data.get("webhook_env", ""))
-    if not webhook_url:
-        print(f"⚠️ Webhook non défini pour {pnj_name}")
-        await bot.process_commands(message)
-        return
 
-    chan = getattr(message.channel, "name", "").lower()
-
-    # 4) Si on est en attente d'une REACTION (fin d'étape) -> ne rien faire ici
+    # 4) Si on attend une réaction (fin d'étape / validation par emoji), on ignore les messages
     if awaiting_reaction:
-        print("— En attente d'une réaction (emoji) pour cette interaction → on ignore les messages.")
         await bot.process_commands(message)
         return
 
     # 5) Brancher selon le type
     qtype = quete.get("type", "interaction")
 
-    # ---------- Cas A : interaction simple ----------
+    # ----- Cas A : Interaction simple -----
     if qtype != "multi_step":
         expected_channel = (quete.get("channel") or "").lower()
-        if expected_channel and chan != expected_channel:
-            print(f"— Mauvais salon (attendu: {expected_channel}) → ignore.")
+        if expected_channel and channel_name != expected_channel:
             await bot.process_commands(message)
             return
 
         keywords = [k.lower() for k in (quete.get("mots_cles") or [])]
         if keywords and not all(k in contenu for k in keywords):
-            print("— Mots-clés non satisfaits → ignore.")
             await bot.process_commands(message)
             return
 
-        # ✅ Conditions OK : réplique prioritaire depuis la quête (replique_pnj), sinon fallback PNJ générique
+        # réplique prioritaire depuis la quête
         texte = (quete.get("replique_pnj") or "").strip()
         if not texte:
-            pool = pnj_data.get("repliques") or [f"{pnj_data.get('nom_affiche','PNJ')} te salue, {{user}}."]
-            derniere = dernieres_repliques.get((pnj_name, quest_id, message.author.id))
-            candidats = [r for r in pool if r != derniere] or pool
-            texte = random.choice(candidats)
-
+            # fallback générique PNJ
+            texte = choisir_fallback_pnj(pnj_name, pnj_data, quest_id, message.author.id)
         texte = texte.format(user=message.author.mention)
 
-        print(f"✅ Interaction simple OK. Envoi de la réplique pour {pnj_name}/{quest_id} : {texte}")
+        await envoyer_replique_pnj(pnj_name, pnj_data, texte)
 
-        async with aiohttp.ClientSession() as session:
-            webhook = discord.Webhook.from_url(webhook_url, session=session)
-            await webhook.send(content=texte, username=pnj_data.get("nom_affiche", "PNJ"))
-
-        # 🧷 Si la quête simple attend une RÉACTION (emoji au niveau racine), on NE clear PAS ici.
+        # Si la quête simple attend un emoji pour être validée → on passe en attente
         emoji_root = quete.get("emoji")
         if emoji_root:
             set_active_interaction(message.author.id, {
                 "awaiting_reaction": True,
                 "emoji": emoji_root
             })
+            # (optionnel) petit rappel côté système
+            try:
+                await message.channel.send(f"(Pour valider, réagis avec {emoji_root} sur le message du {pnj_data.get('nom_affiche','PNJ')} 😉)")
+            except Exception:
+                pass
         else:
+            # sinon, on termine l'interaction côté PNJ
             clear_active_interaction(message.author.id)
 
         await bot.process_commands(message)
         return
 
-    # ---------- Cas B : multi_step ----------
+    # ----- Cas B : Multi-étapes -----
     steps = quete.get("steps", [])
     step_index = (int(current_step) - 1) if current_step else 0
     if step_index < 0 or step_index >= len(steps):
         step_index = 0
 
     step = steps[step_index]
+
     expected_channel = (step.get("channel") or "").lower()
-    if expected_channel and chan != expected_channel:
-        print(f"— Mauvais salon (attendu: {expected_channel}) → ignore.")
+    if expected_channel and channel_name != expected_channel:
         await bot.process_commands(message)
         return
 
     step_keywords = [k.lower() for k in (step.get("mots_cles") or [])]
     if step_keywords and not all(k in contenu for k in step_keywords):
-        print("— Mots-clés non satisfaits pour l'étape → ignore.")
         await bot.process_commands(message)
         return
 
-    # ✅ Conditions OK : réplique d'étape
+    # réplique d'étape (priorité step.replique_pnj)
     texte = (step.get("replique_pnj") or "").strip()
     if not texte:
-        pool = pnj_data.get("repliques") or [f"{pnj_data.get('nom_affiche','PNJ')} te salue, {{user}}."]
-        derniere = dernieres_repliques.get((pnj_name, quest_id, message.author.id))
-        candidats = [r for r in pool if r != derniere] or pool
-        texte = random.choice(candidats)
-
+        # fallback générique PNJ
+        texte = choisir_fallback_pnj(pnj_name, pnj_data, quest_id, message.author.id)
     texte = texte.format(user=message.author.mention)
 
+    await envoyer_replique_pnj(pnj_name, pnj_data, texte)
 
-    print(f"✅ Étape {step_index+1}/{len(steps)} OK. Envoi de la réplique : {texte}")
-
-    async with aiohttp.ClientSession() as session:
-        webhook = discord.Webhook.from_url(webhook_url, session=session)
-        await webhook.send(content=texte, username=pnj_data.get("nom_affiche", "PNJ"))
-
-    # Étape demande une réaction ? -> on passe en attente (validée par Maître des Quêtes)
+    # Étape qui demande une réaction ?
     if step.get("emoji"):
         set_active_interaction(message.author.id, {
             "awaiting_reaction": True,
             "emoji": step["emoji"]
         })
-        # (Optionnel) rappeler l'emoji côté bot système :
         try:
-            await message.channel.send(f"(Pour valider, réagis avec {step['emoji']} sur le message du {pnj_data.get('nom_affiche','PNJ')} 😉)")
+            await message.channel.send(
+                f"(Pour valider, réagis avec {step['emoji']} sur le message du {pnj_data.get('nom_affiche','PNJ')} 😉)"
+            )
         except Exception:
             pass
     else:
-        # Sinon on passe à l'étape suivante, ou on clear si c'était la dernière
-        next_step = (step_index + 1) + 1  # étape suivante (1-based)
+        # Avancer à l'étape suivante
+        next_step = (step_index + 1) + 1  # 1-based
         if next_step <= len(steps):
             set_active_interaction(message.author.id, {"current_step": next_step})
         else:
+            # plus d'étapes → fin côté PNJ
             clear_active_interaction(message.author.id)
 
     await bot.process_commands(message)
 
 
-bot.run(os.getenv("DISCORD_TOKEN_PNJ"))
+# -----------------------------
+# Lancement du bot
+# -----------------------------
+
+def main():
+    token = os.getenv("PNJ_BOT_TOKEN")
+    if not token:
+        raise RuntimeError("Variable d'environnement PNJ_BOT_TOKEN manquante.")
+    if not mongo_client:
+        log.warning("MONGO_URI non défini : le bot PNJ ne pourra pas lire/écrire active_interaction.")
+    bot.run(token)
+
+
+if __name__ == "__main__":
+    main()
