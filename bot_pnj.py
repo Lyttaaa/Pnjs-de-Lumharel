@@ -317,9 +317,9 @@ async def on_message(message: discord.Message):
 # -----------------------------
 
 def main():
-    token = os.getenv("PNJ_BOT_TOKEN")
+    token = os.getenv("DISCORD_TOKEN_PNJ")
     if not token:
-        raise RuntimeError("Variable d'environnement PNJ_BOT_TOKEN manquante.")
+        raise RuntimeError("Variable d'environnement DISCORD_TOKEN_PNJ manquante.")
     if not mongo_client:
         log.warning("MONGO_URI non défini : le bot PNJ ne pourra pas lire/écrire active_interaction.")
     bot.run(token)
