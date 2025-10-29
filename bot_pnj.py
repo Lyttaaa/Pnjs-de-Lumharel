@@ -132,34 +132,34 @@ async def on_message(message):
             await bot.process_commands(message)
             return
 
-       # ✅ Conditions OK : réplique prioritaire depuis la quête (replique_pnj), sinon fallback PNJ générique
-       texte = (quete.get("replique_pnj") or "").strip()
-       if not texte:
-           pool = pnj_data.get("repliques") or [f"{pnj_data.get('nom_affiche','PNJ')} te salue, {{user}}."]
-           derniere = dernieres_repliques.get((pnj_name, quest_id, message.author.id))
-           candidats = [r for r in pool if r != derniere] or pool
-           texte = random.choice(candidats)
+        # ✅ Conditions OK : réplique prioritaire depuis la quête (replique_pnj), sinon fallback PNJ générique
+        texte = (quete.get("replique_pnj") or "").strip()
+        if not texte:
+            pool = pnj_data.get("repliques") or [f"{pnj_data.get('nom_affiche','PNJ')} te salue, {{user}}."]
+            derniere = dernieres_repliques.get((pnj_name, quest_id, message.author.id))
+            candidats = [r for r in pool if r != derniere] or pool
+            texte = random.choice(candidats)
 
-      texte = texte.format(user=message.author.mention)
+        texte = texte.format(user=message.author.mention)
 
-      print(f"✅ Interaction simple OK. Envoi de la réplique pour {pnj_name}/{quest_id} : {texte}")
+        print(f"✅ Interaction simple OK. Envoi de la réplique pour {pnj_name}/{quest_id} : {texte}")
 
-      async with aiohttp.ClientSession() as session:
-          webhook = discord.Webhook.from_url(webhook_url, session=session)
-          await webhook.send(content=texte, username=pnj_data.get("nom_affiche", "PNJ"))
+        async with aiohttp.ClientSession() as session:
+            webhook = discord.Webhook.from_url(webhook_url, session=session)
+            await webhook.send(content=texte, username=pnj_data.get("nom_affiche", "PNJ"))
 
-      # 🧷 Si la quête simple attend une RÉACTION (emoji au niveau racine), on NE clear PAS ici.
-      emoji_root = quete.get("emoji")
-      if emoji_root:
-          set_active_interaction(message.author.id, {
-              "awaiting_reaction": True,
-              "emoji": emoji_root
-          })
-      else:
-          clear_active_interaction(message.author.id)
+        # 🧷 Si la quête simple attend une RÉACTION (emoji au niveau racine), on NE clear PAS ici.
+        emoji_root = quete.get("emoji")
+        if emoji_root:
+            set_active_interaction(message.author.id, {
+                "awaiting_reaction": True,
+                "emoji": emoji_root
+            })
+        else:
+            clear_active_interaction(message.author.id)
 
-      await bot.process_commands(message)
-      return
+        await bot.process_commands(message)
+        return
 
     # ---------- Cas B : multi_step ----------
     steps = quete.get("steps", [])
