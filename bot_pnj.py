@@ -1,5 +1,7 @@
 # bot_pnj.py
 # PNJ bot pour Lumharel — gère les répliques PNJ pour les quêtes d'interaction (simples & multi-étapes)
+PNJS_PATH = "pnjs.json"
+QUETES_PATH = "quetes.json"
 
 import os
 import json
