@@ -37,11 +37,20 @@ bot = commands.Bot(
 PNJS_PATH = os.getenv("PNJS_PATH", "pnjs.json")
 QUETES_PATH = os.getenv("QUETES_PATH", "quetes.json")
 
-# Mongo
-MONGO_URI = os.getenv("MONGO_URI")
-mongo_client: Optional[MongoClient] = MongoClient(MONGO_URI) if MONGO_URI else None
-db = mongo_client.lumharel_bot if mongo_client else None
-user_state = db.user_state if db else None
+try:
+    mongo_client = MongoClient(MONGO_URI) if MONGO_URI else None
+    db = mongo_client.get_database("lumharel_bot") if mongo_client is not None else None
+    user_state = db.user_state if db is not None else None
+    if db is None:
+        log.warning("MONGO_URI défini mais DB non accessible (vérifie la chaîne/whitelist IP).")
+    else:
+        log.info("Connexion MongoDB OK.")
+except Exception as e:
+    log.warning(f"Échec connexion Mongo: {e}")
+    mongo_client = None
+    db = None
+    user_state = None
+
 
 # Petit cache anti-répétition de réplique par (pnj, quest, user)
 dernieres_repliques: Dict[tuple, str] = {}
