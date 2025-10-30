@@ -1,9 +1,10 @@
-# bot_pnj.py — PNJ d’interaction Lumharel
+# bot_pnj.py — PNJ d’interaction Lumharel (version stabilisée)
 import os
 import json
 import random
 import logging
-from typing import Dict, Any, Optional
+import unicodedata
+from typing import Dict, Any, Optional, List
 
 import discord
 from discord.ext import commands
@@ -23,6 +24,8 @@ QUETES_PATH = os.getenv("QUETES_PATH", "quetes.json")
 
 INTENTS = discord.Intents.default()
 INTENTS.message_content = True
+INTENTS.reactions = True
+INTENTS.guilds = True
 
 bot = commands.Bot(
     command_prefix="!",
@@ -112,9 +115,38 @@ log.info(f"PNJs chargés: {list(pnjs.keys())}")
 log.info(f"Quêtes indexées: {len(QUETES_INDEX)}")
 
 # ================
-#  Utilitaires
+#  Utils
 # ================
 dernieres_repliques: Dict[tuple, str] = {}
+
+def _normalize_text(s: str) -> str:
+    if not isinstance(s, str):
+        return ""
+    s = s.lower().strip()
+    s = unicodedata.normalize("NFKD", s)
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    s = s.replace("’", "'").replace("\u200b", "")
+    return s
+
+def _channel_match(message: discord.Message, step_or_quest: Dict[str, Any]) -> bool:
+    """Accepte 'channel' (nom) OU 'channel_id' (int ou str)."""
+    expected_name = _normalize_text(step_or_quest.get("channel", ""))
+    expected_id = step_or_quest.get("channel_id")
+    if expected_id:
+        try:
+            if int(expected_id) == message.channel.id:
+                return True
+        except Exception:
+            pass
+    if expected_name:
+        return _normalize_text(getattr(message.channel, "name", "")) == expected_name
+    return True  # si rien n'est précisé
+
+def _keywords_match(content: str, keywords: List[str]) -> bool:
+    if not keywords:
+        return True
+    ncontent = _normalize_text(content)
+    return all(_normalize_text(k) in ncontent for k in keywords)
 
 async def envoyer_replique_pnj(pnj_name: str, pnj_data: Dict[str, Any], contenu: str) -> None:
     webhook_env = pnj_data.get("webhook_env", "")
@@ -133,6 +165,22 @@ def choisir_fallback_pnj(pnj_name: str, pnj_data: Dict[str, Any], quest_id: str,
     texte = random.choice(candidats)
     dernieres_repliques[(pnj_name, quest_id, user_id)] = texte
     return texte
+
+def _get_step(quete: Dict[str, Any], current_step: Optional[int]) -> Optional[Dict[str, Any]]:
+    steps = quete.get("steps", [])
+    if not steps:
+        return None
+    idx = (int(current_step) - 1) if current_step else 0
+    if idx < 0 or idx >= len(steps):
+        idx = 0
+    return steps[idx]
+
+def _has_next_step(quete: Dict[str, Any], current_step: Optional[int]) -> bool:
+    steps = quete.get("steps", [])
+    if not steps:
+        return False
+    idx = (int(current_step) - 1) if current_step else 0
+    return (idx + 1) < len(steps)
 
 # ================
 #  Events & cmds
@@ -157,9 +205,7 @@ async def on_message(message: discord.Message):
     if message.author.bot:
         return
 
-    contenu = (message.content or "").lower()
-    channel_name = getattr(message.channel, "name", "").lower()
-
+    contenu = message.content or ""
     state = get_active_interaction(message.author.id)
     if not state:
         await bot.process_commands(message)
@@ -182,6 +228,7 @@ async def on_message(message: discord.Message):
         return
     pnj_data = pnjs[pnj_name]
 
+    # Si on attend une réaction, ne rien faire tant que la réaction n'est pas arrivée
     if awaiting_reaction:
         await bot.process_commands(message)
         return
@@ -190,20 +237,18 @@ async def on_message(message: discord.Message):
 
     # --- Interaction simple ---
     if qtype != "multi_step":
-        expected_channel = (quete.get("channel") or "").lower()
-        if expected_channel and channel_name != expected_channel:
+        if not _channel_match(message, quete):
             await bot.process_commands(message)
             return
 
-        keywords = [k.lower() for k in (quete.get("mots_cles") or [])]
-        if keywords and not all(k in contenu for k in keywords):
+        keywords = quete.get("mots_cles") or []
+        if not _keywords_match(contenu, keywords):
             await bot.process_commands(message)
             return
 
         texte = (quete.get("replique_pnj") or "").strip() or \
                 choisir_fallback_pnj(pnj_name, pnj_data, quest_id, message.author.id)
         texte = texte.format(user=message.author.mention)
-
         await envoyer_replique_pnj(pnj_name, pnj_data, texte)
 
         emoji_root = quete.get("emoji")
@@ -222,19 +267,19 @@ async def on_message(message: discord.Message):
         return
 
     # --- Multi-étapes ---
-    steps = quete.get("steps", [])
-    step_index = (int(current_step) - 1) if current_step else 0
-    if step_index < 0 or step_index >= len(steps):
-        step_index = 0
-    step = steps[step_index]
-
-    expected_channel = (step.get("channel") or "").lower()
-    if expected_channel and channel_name != expected_channel:
+    step = _get_step(quete, current_step)
+    if not step:
+        # Pas d'étape définie => on clear
+        clear_active_interaction(message.author.id)
         await bot.process_commands(message)
         return
 
-    step_keywords = [k.lower() for k in (step.get("mots_cles") or [])]
-    if step_keywords and not all(k in contenu for k in step_keywords):
+    if not _channel_match(message, step):
+        await bot.process_commands(message)
+        return
+
+    step_keywords = step.get("mots_cles") or []
+    if not _keywords_match(contenu, step_keywords):
         await bot.process_commands(message)
         return
 
@@ -252,13 +297,50 @@ async def on_message(message: discord.Message):
         except Exception:
             pass
     else:
-        next_step = (step_index + 1) + 1  # 1-based
-        if next_step <= len(steps):
+        if _has_next_step(quete, current_step):
+            next_step = (int(current_step) if current_step else 1) + 1
             set_active_interaction(message.author.id, {"current_step": next_step})
         else:
             clear_active_interaction(message.author.id)
 
     await bot.process_commands(message)
+
+# --- Réactions pour avancer une étape (utile pour étapes intermédiaires avec emoji)
+@bot.event
+async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
+    if payload.user_id == bot.user.id:
+        return
+    emoji = str(payload.emoji)
+
+    # Récupérer l'état
+    state = get_active_interaction(payload.user_id)
+    if not state or not state.get("awaiting_reaction"):
+        return
+
+    quest_id = state.get("quest_id")
+    quete = charger_quete_par_id(quest_id)
+    if not quete:
+        return
+
+    # Vérifier si l'emoji correspond à l'étape courante (ou à l'interaction simple)
+    expected = state.get("emoji")
+    if not expected:
+        # fallback: lire depuis quete/step si pas mémorisé
+        if quete.get("type") == "multi_step":
+            step = _get_step(quete, state.get("current_step"))
+            expected = step.get("emoji") if step else None
+        else:
+            expected = quete.get("emoji")
+
+    if not expected or emoji != expected:
+        return
+
+    # Si on a une étape suivante -> avancer ; sinon clear (Maître des Quêtes récompensera)
+    if quete.get("type") == "multi_step" and _has_next_step(quete, state.get("current_step")):
+        next_step = (int(state.get("current_step") or 1)) + 1
+        set_active_interaction(payload.user_id, {"current_step": next_step, "awaiting_reaction": False, "emoji": None})
+    else:
+        clear_active_interaction(payload.user_id)
 
 # ================
 #  RUN
