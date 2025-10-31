@@ -7,6 +7,7 @@ from typing import Any, Dict, Optional, List
 import discord
 from discord.ext import commands
 from discord.utils import get as dget
+from pymongo import MongoClient
 
 # ============
 #  INTENTS
@@ -21,9 +22,10 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 # ============
 #  CONFIG
 # ============
-MONGO_URI = os.getenv("MONGO_URI")  # même var que l'autre bot
+MONGO_URI = os.getenv("MONGO_URI")                 # même var que l'autre bot
 QUESTS_FILE = os.getenv("CHEMIN_QUETES", "quetes.json")  # même fichier que l'autre bot
-DISCORD_TOKEN = os.getenv("DISCORD_TOKEN_PNJ")  # token spécifique PNJ
+DISCORD_TOKEN = os.getenv("DISCORD_TOKEN_PNJ")     # token spécifique PNJ
+DB_NAME = os.getenv("MONGO_DB", "lumharel_bot")    # tu m'as dit que les deux utilisent lumharel_bot
 
 if not MONGO_URI:
     raise RuntimeError("MONGO_URI est requis pour le bot PNJ.")
@@ -31,12 +33,11 @@ if not MONGO_URI:
 # ============
 #  MONGO
 # ============
-from pymongo import MongoClient
 client = MongoClient(MONGO_URI)
-db = client.get_database("lumharel_bot")
+db = client.get_database(DB_NAME)
 
 # état d'interaction actif (déposé par le Maître des Quêtes quand on accepte)
-user_state           = db.user_state
+user_state = db.user_state
 
 # ============
 #  UTILS
@@ -70,10 +71,37 @@ def get_user_state(uid: int | str) -> Optional[Dict[str, Any]]:
     return user_state.find_one({"_id": str(uid)})
 
 def set_active_interaction(uid: int | str, patch: Dict[str, Any]):
-    user_state.update_one({"_id": str(uid)}, {"$set": {"active_interaction": {**(get_user_state(uid) or {}).get("active_interaction", {}), **patch}}}, upsert=True)
+    current = (get_user_state(uid) or {}).get("active_interaction", {})
+    user_state.update_one(
+        {"_id": str(uid)},
+        {"$set": {"active_interaction": {**current, **patch}}},
+        upsert=True
+    )
 
 def clear_active_interaction(uid: int | str):
     user_state.update_one({"_id": str(uid)}, {"$unset": {"active_interaction": ""}})
+
+def extract_keywords(obj: Dict[str, Any]) -> List[str]:
+    """
+    Renvoie la liste des mots-clés à matcher.
+    - Priorité: field 'mots_cles' si présent (list)
+    - Sinon, tente de parser les phrases 'Ton message doit contenir : ...'
+      dans details_mp / description (séparées par des virgules).
+    """
+    mk = obj.get("mots_cles")
+    if isinstance(mk, list) and mk:
+        return mk
+
+    blob = " ".join([
+        str(obj.get("details_mp") or ""),
+        str(obj.get("description") or "")
+    ])
+    m = re.search(r"(?i)contien[t]? ?: ?(.+)", blob)
+    if not m:
+        return []
+    raw = m.group(1)
+    parts = [p.strip(" `,.;:") for p in raw.split(",")]
+    return [p for p in parts if p]
 
 async def dm_etape(user: discord.User | discord.Member, quete: Dict[str, Any], step_number: int):
     """Envoie en DM un récap de l'étape N (sans spoiler la suivante)."""
@@ -135,9 +163,9 @@ async def on_message(message: discord.Message):
         await bot.process_commands(message)
         return
 
-    # On ne traite que les quêtes d'interactions ici
+    # Types gérés par le PNJ
     qtype = (quete.get("type") or "interaction").strip()
-    if qtype not in ("interaction", "multi_step"):
+    if qtype not in ("interaction", "multi_step", "reaction"):
         await bot.process_commands(message)
         return
 
@@ -150,11 +178,11 @@ async def on_message(message: discord.Message):
         step_index = max(0, min((int(current_step) - 1), len(steps) - 1))
         step = steps[step_index]
     else:
-        step = quete  # fallback pour simple
+        step = quete  # fallback pour simple/reaction
 
-    # Matching des mots-clés (sans accents/casse)
-    contenu = _normalize(message.content)
-    mots = [ _normalize(m) for m in (step.get("mots_cles") or []) ]
+    # Matching des mots-clés (sans accents/casse, tolère @)
+    contenu = _normalize(message.content).replace("@", "")
+    mots = [ _normalize(m.lstrip("@")) for m in extract_keywords(step) ]
     # si des mots-clés sont définis, tous doivent être présents
     if mots and not all(m in contenu for m in mots):
         await bot.process_commands(message)
@@ -173,13 +201,25 @@ async def on_message(message: discord.Message):
             # sinon on passe à l'étape suivante
             if (steps and (step_index + 1) < len(steps)):
                 next_step = step_index + 2  # 1-based
-                set_active_interaction(message.author.id, {"current_step": next_step, "awaiting_reaction": False, "emoji": None})
+                set_active_interaction(
+                    message.author.id,
+                    {"current_step": next_step, "awaiting_reaction": False, "emoji": None}
+                )
                 await dm_etape(message.author, quete, next_step)
             else:
                 # fin
                 clear_active_interaction(message.author.id)
+
+    elif qtype == "reaction":
+        # Interaction simple avec emoji requis à cette unique étape
+        if quete.get("emoji"):
+            set_active_interaction(message.author.id, {"awaiting_reaction": True})
+        else:
+            # (rare) si pas d'emoji, on termine
+            clear_active_interaction(message.author.id)
+
     else:
-        # interaction simple, terminé côté PNJ
+        # "interaction" simple sans emoji => terminé
         clear_active_interaction(message.author.id)
 
     await bot.process_commands(message)
@@ -203,17 +243,22 @@ async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
 
     # Charger quête
     quete = get_quete_by_id(quete_id)
-    if not quete or (quete.get("type") != "multi_step"):
+    if not quete:
         return
 
+    qtype = (quete.get("type") or "interaction").strip()
     steps = quete.get("steps") or []
-    if not steps:
-        return
 
-    step_index = max(0, min((int(current_step) - 1), len(steps) - 1))
-    step = steps[step_index]
+    if qtype == "multi_step":
+        if not steps:
+            return
+        step_index = max(0, min((int(current_step) - 1), len(steps) - 1))
+        step = steps[step_index]
+        expected = step.get("emoji")
+    else:
+        # quêtes simples: emoji au niveau de la quête
+        expected = quete.get("emoji")
 
-    expected = step.get("emoji")
     if not expected:
         return
 
@@ -222,7 +267,7 @@ async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
     if incoming != expected and getattr(payload.emoji, "name", None) != expected:
         return
 
-    # Valide cette étape
+    # Valide cette étape (petit feedback côté salon)
     channel = bot.get_channel(payload.channel_id)
     if channel:
         try:
@@ -234,7 +279,7 @@ async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
             pass
 
     # Etape suivante ou fin
-    if (step_index + 1) < len(steps):
+    if qtype == "multi_step" and steps and (step_index + 1) < len(steps):
         next_step = step_index + 2
         set_active_interaction(payload.user_id, {"current_step": next_step, "awaiting_reaction": False, "emoji": None})
         # DM étape suivante
@@ -243,6 +288,15 @@ async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
             await dm_etape(user, quete, next_step)
     else:
         clear_active_interaction(payload.user_id)
+
+# ====================
+#  DEBUG (optionnel)
+# ====================
+@bot.command(name="debug_pnj")
+@commands.has_permissions(administrator=True)
+async def debug_pnj(ctx):
+    st = get_user_state(ctx.author.id) or {}
+    await ctx.send(f"```json\n{json.dumps(st, ensure_ascii=False, indent=2)}\n```")
 
 # ====================
 #  READY / RUN
